@@ -68,7 +68,7 @@ async def analyze_image(file: UploadFile = File(...)):
 
         # Vytvoření zprávy pomocí nového API
         response = client.messages.create(
-            model="claude-3-sonnet-20240229",
+            model="claude-3-5-haiku-20241022",
             max_tokens=1000,
             system="Jsi expert na analýzu jídla a kalorických hodnot.",
             messages=[
