@@ -1,0 +1,6 @@
+fastapi
+python-multipart
+jinja2
+anthropic>=0.18.0
+python-dotenv
+uvicorn 

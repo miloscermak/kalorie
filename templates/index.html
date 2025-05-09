@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Analýza jídla</title>
+    <style>
+        body { max-width: 800px; margin: 0 auto; padding: 20px; }
+        .result { margin-top: 20px; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <h1>Analýza jídla pomocí AI</h1>
+    <form id="uploadForm" enctype="multipart/form-data">
+        <input type="file" name="file" accept="image/jpeg,image/png" required>
+        <button type="submit">Analyzovat</button>
+    </form>
+    <div id="result" class="result"></div>
+
+    <script>
+        document.getElementById('uploadForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const result = document.getElementById('result');
+            result.textContent = 'Analyzuji...';
+            
+            try {
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                result.textContent = data.error || data.response;
+            } catch (error) {
+                result.textContent = 'Došlo k chybě při zpracování požadavku.';
+            }
+        };
+    </script>
+</body>
+</html> 
