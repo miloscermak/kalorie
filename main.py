@@ -16,8 +16,17 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-# Initialize Gemini client
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+# Initialize Gemini client (lazy initialization)
+_client = None
+
+def get_gemini_client():
+    global _client
+    if _client is None:
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY environment variable is not set")
+        _client = genai.Client(api_key=api_key)
+    return _client
 
 STUDIO_PORTRAIT_PROMPT = """Transform this person's photo into a professional studio portrait with the following specifications:
 
@@ -107,6 +116,7 @@ async def generate_portrait(file: UploadFile = File(...)):
         )
 
         # Generate portrait using Gemini
+        client = get_gemini_client()
         response = client.models.generate_content(
             model="gemini-3-pro-image-generation",
             contents=[STUDIO_PORTRAIT_PROMPT, image_part],
@@ -144,6 +154,14 @@ async def generate_portrait(file: UploadFile = File(...)):
             "message": response_text or "Studiový portrét byl úspěšně vytvořen!"
         }
 
+    except ValueError as e:
+        if "GEMINI_API_KEY" in str(e):
+            print(f"Chyba konfigurace: {str(e)}")
+            return JSONResponse(
+                status_code=503,
+                content={"error": "Služba není správně nakonfigurována. Kontaktujte administrátora."}
+            )
+        raise
     except Exception as e:
         print(f"Chyba při generování: {str(e)}")
         return JSONResponse(
