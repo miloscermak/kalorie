@@ -1,9 +1,9 @@
 services:
   - type: web
-    name: kalorie-analyzer
+    name: ai-portrait-studio
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: python -m gunicorn main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker
     envVars:
-      - key: ANTHROPIC_API_KEY
-        sync: false 
+      - key: GEMINI_API_KEY
+        sync: false

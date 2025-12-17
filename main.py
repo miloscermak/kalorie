@@ -1,11 +1,14 @@
 from fastapi import FastAPI, File, UploadFile, Request
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
-import anthropic
+from fastapi.responses import HTMLResponse, JSONResponse
+from google import genai
+from google.genai import types
 import base64
 import os
 from dotenv import load_dotenv
+from PIL import Image
+import io
 
 load_dotenv()
 
@@ -13,121 +16,142 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+# Initialize Gemini client
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-api_key = os.getenv("ANTHROPIC_API_KEY")
-if not api_key:
-    print("VAROVÁNÍ: API klíč nebyl nalezen v .env souboru")
-elif not api_key.startswith("sk-ant-"):
-    print("VAROVÁNÍ: API klíč nemá správný formát")
+STUDIO_PORTRAIT_PROMPT = """Transform this person's photo into a professional studio portrait with the following specifications:
+
+STYLE: Clean Studio Portrait
+- Ultra-realistic studio portrait with soft lighting
+- Natural skin texture preserved
+- Minimal, clean aesthetic
+
+SUBJECT:
+- Portrait type: tight face centered framing
+- Expression: neutral, calm
+- Lighting: soft diffused studio lighting
+- Skin texture: realistic, natural
+- If visible, wardrobe should appear in solid neutral colors
+
+BACKGROUND:
+- Seamless backdrop
+- Color: light grey or white (#EDEDED)
+- Style: minimal and clean
+
+TEXTURE & FINISH:
+- Subtle grain
+- Fine digital noise
+- Minimal compression artifacts
+- Matte editorial finish
+
+COLOR PALETTE:
+- Neutral soft tones
+- Medium contrast
+- No strong accent colors
+
+CAMERA SIMULATION:
+- 85mm portrait lens effect
+- Shallow depth of field
+- Focus on eyes
+- Straight-on angle
+
+OUTPUT:
+- Professional studio portrait format
+- Aspect ratio: 3:4
+- High resolution quality
+
+Keep the person's identity and likeness accurate while applying professional studio portrait aesthetics."""
+
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
-@app.post("/analyze")
-async def analyze_image(file: UploadFile = File(...)):
+
+@app.post("/generate")
+async def generate_portrait(file: UploadFile = File(...)):
     try:
-        # Načtení a zakódování obrázku do base64
+        # Read and validate the uploaded image
         contents = await file.read()
-        base64_image = base64.b64encode(contents).decode("utf-8")
-        
-        # Kontrola velikosti souboru
-        if len(contents) > 20 * 1024 * 1024:  # 20MB limit
-            return {"error": "Soubor je příliš velký. Maximální velikost je 20MB."}
-            
-        # Kontrola typu souboru
-        if file.content_type not in ["image/jpeg", "image/png"]:
-            return {"error": "Podporované formáty jsou pouze JPEG a PNG."}
-        
-        prompt = """Jsi zkušený odborník na analýzu jídla a výživu. Tvým úkolem je analyzovat fotografii jídla a poskytnout detailní informace o něm. Zde je fotografie jídla, kterou budeš analyzovat:
 
-<fotografie_jidla>
-{{IMAGE}}
-</fotografie_jidla>
+        # Check file size (max 10MB)
+        if len(contents) > 10 * 1024 * 1024:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Soubor je příliš velký. Maximální velikost je 10MB."}
+            )
 
-Pečlivě si prohlédni všechny detaily zobrazené na fotografii. Zaměř se na ingredience, způsob přípravy, velikost porce a celkový vzhled jídla.
+        # Check file type
+        if file.content_type not in ["image/jpeg", "image/png", "image/webp"]:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Podporované formáty jsou JPEG, PNG a WebP."}
+            )
 
-Před poskytnutím konečné odpovědi proveď důkladnou analýzu v následujících krocích. 
+        # Open image with PIL to validate and get dimensions
+        try:
+            image = Image.open(io.BytesIO(contents))
+            image.verify()
+            # Re-open after verify
+            image = Image.open(io.BytesIO(contents))
+        except Exception:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Nepodařilo se načíst obrázek. Zkontrolujte, že soubor není poškozený."}
+            )
 
-1. Popis jídla:
-   - Popiš, co vidíš na fotografii, včetně textury, barvy a prezentace
-   - Identifikuj hlavní ingredience
-   - Odhadni způsob přípravy
-   - Odhadni přesnou velikost porce
-
-2. Kulturní kontext:
-   - Zvaž možný původ jídla a jeho kulturní význam
-   - Navrhni potenciální variace tohoto jídla
-
-3. Návrh názvu:
-   - Na základě pozorování navrhni vhodný český název pro toto jídlo
-   - Ujisti se, že název je výstižný a popisný
-
-4. Odhad kalorické hodnoty:
-   - Zvaž viditelné ingredience a jejich přibližné množství
-   - Vezmi v úvahu odhadnutou velikost porce
-   - Odhadni přibližnou kalorickou hodnotu a zdůvodni svůj odhad
-
-5. Základní informace:
-   - Shrň klíčové informace o jídle (např. původ, typické použití, variace)
-
-6. Zdravotní benefity:
-   - Identifikuj potenciální pozitivní účinky jídla na zdraví
-   - Zvaž nutriční hodnotu jednotlivých ingrediencí
-
-7. Zdravotní rizika:
-   - Zvaž možná zdravotní rizika spojená s konzumací tohoto jídla
-   - Vezmi v úvahu alergeny, vysoký obsah tuku nebo cukru, apod.
-
-Na základě své analýzy nyní poskytni strukturovanou odpověď v následujícím formátu:
-
-Název jídla:
-[Navržený název jídla v češtině]
-
-Kalorická hodnota:
-[Odhadovaná kalorická hodnota jídla v češtině, včetně zdůvodnění odhadu]
-
-Poznámky:
-[Základní informace o jídle]
-
-Zdravotní benefity:
-[Seznam potenciálních pozitivních účinků na zdraví]
-
-Zdravotní rizika:
-[Seznam možných zdravotních rizik]
-
-Ujisti se, že tvá odpověď je v češtině a obsahuje všechny požadované sekce. Buď konkrétní a výstižný ve svých popisech a odhadech.
-"""
-
-        # Vytvoření zprávy pomocí nového API
-        response = client.messages.create(
-            model="claude-3-5-haiku-20241022",
-            max_tokens=1000,
-            system="Jsi expert na analýzu jídla a kalorických hodnot.",
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": prompt.replace("{{IMAGE}}", "")
-                        },
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": file.content_type,
-                                "data": base64_image
-                            }
-                        }
-                    ]
-                }
-            ]
+        # Prepare image for Gemini
+        image_part = types.Part.from_bytes(
+            data=contents,
+            mime_type=file.content_type
         )
 
-        return {"response": response.content[0].text}
-        
+        # Generate portrait using Gemini
+        response = client.models.generate_content(
+            model="gemini-3-pro-image-generation",
+            contents=[STUDIO_PORTRAIT_PROMPT, image_part],
+            config=types.GenerateContentConfig(
+                response_modalities=["TEXT", "IMAGE"]
+            )
+        )
+
+        # Extract generated image from response
+        generated_image_data = None
+        response_text = None
+
+        for part in response.candidates[0].content.parts:
+            if part.inline_data is not None:
+                generated_image_data = part.inline_data.data
+            elif part.text is not None:
+                response_text = part.text
+
+        if generated_image_data is None:
+            return JSONResponse(
+                status_code=500,
+                content={"error": "Nepodařilo se vygenerovat portrét. Zkuste to prosím znovu."}
+            )
+
+        # Convert to base64 for frontend
+        generated_base64 = base64.b64encode(generated_image_data).decode("utf-8")
+
+        # Also send original image for comparison
+        original_base64 = base64.b64encode(contents).decode("utf-8")
+
+        return {
+            "success": True,
+            "original_image": f"data:{file.content_type};base64,{original_base64}",
+            "generated_image": f"data:image/png;base64,{generated_base64}",
+            "message": response_text or "Studiový portrét byl úspěšně vytvořen!"
+        }
+
     except Exception as e:
-        print(f"Chyba při zpracování: {str(e)}")  # Pro debugging
-        return {"error": f"Došlo k chybě při analýze: {str(e)}"} 
+        print(f"Chyba při generování: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Došlo k chybě při generování portrétu: {str(e)}"}
+        )
+
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}

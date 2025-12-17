@@ -1,38 +1,220 @@
 <!DOCTYPE html>
-<html>
+<html lang="cs">
 <head>
-    <title>Analýza jídla</title>
-    <style>
-        body { max-width: 800px; margin: 0 auto; padding: 20px; }
-        .result { margin-top: 20px; white-space: pre-wrap; }
-    </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Portrait Studio</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <h1>Analýza jídla pomocí AI</h1>
-    <form id="uploadForm" enctype="multipart/form-data">
-        <input type="file" name="file" accept="image/jpeg,image/png" required>
-        <button type="submit">Analyzovat</button>
-    </form>
-    <div id="result" class="result"></div>
+    <div class="container">
+        <header>
+            <h1>AI Portrait Studio</h1>
+            <p class="subtitle">Profesionalni studiovy portret z vasi fotky</p>
+        </header>
+
+        <main>
+            <div class="upload-section">
+                <form id="uploadForm" enctype="multipart/form-data">
+                    <div class="upload-area" id="uploadArea">
+                        <div class="upload-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                <polyline points="21 15 16 10 5 21"></polyline>
+                            </svg>
+                        </div>
+                        <p class="upload-text">Pretahni fotku sem nebo klikni pro vyber</p>
+                        <p class="upload-hint">Podporovane formaty: JPEG, PNG, WebP (max 10MB)</p>
+                        <input type="file" name="file" id="fileInput" accept="image/jpeg,image/png,image/webp" required hidden>
+                    </div>
+                    <button type="submit" class="generate-btn" id="generateBtn" disabled>
+                        <span class="btn-text">Vytvorit studiovy portret</span>
+                        <span class="btn-loading" hidden>
+                            <svg class="spinner" viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" fill="none" stroke-dasharray="60" stroke-dashoffset="20"></circle>
+                            </svg>
+                            Generuji...
+                        </span>
+                    </button>
+                </form>
+            </div>
+
+            <div class="preview-section" id="previewSection" hidden>
+                <h2>Nahled</h2>
+                <div class="preview-image">
+                    <img id="imagePreview" src="" alt="Nahled fotky">
+                </div>
+            </div>
+
+            <div class="result-section" id="resultSection" hidden>
+                <h2>Vysledek</h2>
+                <div class="comparison">
+                    <div class="comparison-item">
+                        <h3>Original</h3>
+                        <img id="originalResult" src="" alt="Originalni fotka">
+                    </div>
+                    <div class="comparison-arrow">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                            <polyline points="12 5 19 12 12 19"></polyline>
+                        </svg>
+                    </div>
+                    <div class="comparison-item">
+                        <h3>Studiovy portret</h3>
+                        <img id="generatedResult" src="" alt="Vygenerovany portret">
+                    </div>
+                </div>
+                <div class="result-actions">
+                    <a id="downloadBtn" class="download-btn" download="studio-portrait.png">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        Stahnout portret
+                    </a>
+                    <button type="button" class="reset-btn" id="resetBtn">Zkusit jinou fotku</button>
+                </div>
+            </div>
+
+            <div class="error-section" id="errorSection" hidden>
+                <div class="error-message">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
+                    <span id="errorText"></span>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>Vytvoreno pomoci AI od Google Gemini</p>
+        </footer>
+    </div>
 
     <script>
-        document.getElementById('uploadForm').onsubmit = async (e) => {
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const uploadForm = document.getElementById('uploadForm');
+        const generateBtn = document.getElementById('generateBtn');
+        const previewSection = document.getElementById('previewSection');
+        const imagePreview = document.getElementById('imagePreview');
+        const resultSection = document.getElementById('resultSection');
+        const errorSection = document.getElementById('errorSection');
+        const errorText = document.getElementById('errorText');
+        const originalResult = document.getElementById('originalResult');
+        const generatedResult = document.getElementById('generatedResult');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const resetBtn = document.getElementById('resetBtn');
+
+        // Drag and drop
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        uploadArea.addEventListener('dragover', (e) => {
             e.preventDefault();
-            const formData = new FormData(e.target);
-            const result = document.getElementById('result');
-            result.textContent = 'Analyzuji...';
-            
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+                handleFileSelect(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileSelect(e.target.files[0]);
+            }
+        });
+
+        function handleFileSelect(file) {
+            if (!file.type.match(/^image\/(jpeg|png|webp)$/)) {
+                showError('Podporovane formaty jsou pouze JPEG, PNG a WebP.');
+                return;
+            }
+
+            if (file.size > 10 * 1024 * 1024) {
+                showError('Soubor je prilis velky. Maximalni velikost je 10MB.');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                imagePreview.src = e.target.result;
+                previewSection.hidden = false;
+                generateBtn.disabled = false;
+                resultSection.hidden = true;
+                errorSection.hidden = true;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        uploadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            // Show loading state
+            generateBtn.disabled = true;
+            generateBtn.querySelector('.btn-text').hidden = true;
+            generateBtn.querySelector('.btn-loading').hidden = false;
+            errorSection.hidden = true;
+            resultSection.hidden = true;
+
             try {
-                const response = await fetch('/analyze', {
+                const response = await fetch('/generate', {
                     method: 'POST',
                     body: formData
                 });
+
                 const data = await response.json();
-                result.textContent = data.error || data.response;
+
+                if (data.error) {
+                    showError(data.error);
+                } else if (data.success) {
+                    originalResult.src = data.original_image;
+                    generatedResult.src = data.generated_image;
+                    downloadBtn.href = data.generated_image;
+                    resultSection.hidden = false;
+                    previewSection.hidden = true;
+                }
             } catch (error) {
-                result.textContent = 'Došlo k chybě při zpracování požadavku.';
+                showError('Doslo k chybe pri komunikaci se serverem. Zkuste to prosim znovu.');
+            } finally {
+                generateBtn.disabled = false;
+                generateBtn.querySelector('.btn-text').hidden = false;
+                generateBtn.querySelector('.btn-loading').hidden = true;
             }
-        };
+        });
+
+        function showError(message) {
+            errorText.textContent = message;
+            errorSection.hidden = false;
+        }
+
+        resetBtn.addEventListener('click', () => {
+            fileInput.value = '';
+            imagePreview.src = '';
+            previewSection.hidden = true;
+            resultSection.hidden = true;
+            errorSection.hidden = true;
+            generateBtn.disabled = true;
+        });
     </script>
 </body>
-</html> 
+</html>
