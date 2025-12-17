@@ -5,5 +5,5 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: python -m gunicorn main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker
     envVars:
-      - key: GOOGLE_API_KEY
+      - key: GEMINI_API_KEY
         sync: false
