@@ -118,7 +118,7 @@ async def generate_portrait(file: UploadFile = File(...)):
         # Generate portrait using Gemini
         client = get_gemini_client()
         response = client.models.generate_content(
-            model="gemini-3-pro-image-generation",
+            model="gemini-2.0-flash-exp",
             contents=[STUDIO_PORTRAIT_PROMPT, image_part],
             config=types.GenerateContentConfig(
                 response_modalities=["TEXT", "IMAGE"]
